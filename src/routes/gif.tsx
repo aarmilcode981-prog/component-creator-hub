@@ -102,10 +102,25 @@ ${preset.keyframes}
 
       const frameCount = Math.max(1, Math.round((duration / 1000) * fps));
       const delay = Math.round(1000 / fps);
+      const animatedElements = [img, ...Array.from(stage.querySelectorAll<HTMLElement>("*"))];
+
+      const waitForPaint = () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        });
 
       for (let i = 0; i < frameCount; i++) {
+        const elapsed = i * delay;
+        animatedElements.forEach((el) => {
+          // Freeze the live CSS animation at the exact timestamp for this GIF frame.
+          // Without this, DOM-to-canvas cloning restarts animations at frame 0 each capture.
+          el.style.animationDelay = `-${elapsed}ms`;
+          el.style.animationFillMode = "both";
+          el.style.animationPlayState = "paused";
+        });
+        stage.getBoundingClientRect();
         // eslint-disable-next-line no-await-in-loop
-        await new Promise((r) => setTimeout(r, delay));
+        await waitForPaint();
         // eslint-disable-next-line no-await-in-loop
         const canvas = await toCanvas(stage, {
           backgroundColor: "#0d0f14",
