@@ -6,10 +6,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { LogOut, Plus, Trash2, Save, Loader2 } from "lucide-react";
 import { SandboxIframe, buildSrcDoc, type PreviewLang } from "@/components/preview-sandbox";
+import { starterComponents, starterGifPresets } from "@/lib/starter-content";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminPage,
@@ -36,8 +43,13 @@ function AdminPage() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b border-border">
         <div className="mx-auto max-w-7xl px-6 h-14 flex items-center justify-between">
-          <Link to="/" className="font-mono text-sm"><span className="text-primary">$</span> snippet-lab / admin</Link>
-          <Button variant="ghost" size="sm" onClick={signOut}><LogOut className="size-4" />Sign out</Button>
+          <Link to="/" className="font-mono text-sm">
+            <span className="text-primary">$</span> snippet-lab / admin
+          </Link>
+          <Button variant="ghost" size="sm" onClick={signOut}>
+            <LogOut className="size-4" />
+            Sign out
+          </Button>
         </div>
       </header>
       <div className="mx-auto max-w-7xl px-6 py-8">
@@ -46,8 +58,12 @@ function AdminPage() {
             <TabsTrigger value="gifs">CSS Presets</TabsTrigger>
             <TabsTrigger value="components">Components</TabsTrigger>
           </TabsList>
-          <TabsContent value="gifs" className="mt-6"><PresetManager /></TabsContent>
-          <TabsContent value="components" className="mt-6"><ComponentManager /></TabsContent>
+          <TabsContent value="gifs" className="mt-6">
+            <PresetManager />
+          </TabsContent>
+          <TabsContent value="components" className="mt-6">
+            <ComponentManager />
+          </TabsContent>
         </Tabs>
       </div>
     </div>
@@ -56,8 +72,7 @@ function AdminPage() {
 
 /* ---------------- CSS Preset Manager ---------------- */
 
-const DUMMY_IMG =
-  "https://images.unsplash.com/photo-1520975916090-3105956dac38?w=400&q=80";
+const DUMMY_IMG = "https://images.unsplash.com/photo-1520975916090-3105956dac38?w=400&q=80";
 
 function PresetManager() {
   const [items, setItems] = useState<CssPreset[]>([]);
@@ -69,12 +84,29 @@ function PresetManager() {
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  async function addStarterPresets() {
+    setSaving(true);
+    const { error } = await supabase.from("css_presets").upsert(starterGifPresets, {
+      onConflict: "name",
+      ignoreDuplicates: true,
+    });
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("Starter GIF presets added");
+    load();
+  }
+
   async function load() {
-    const { data, error } = await supabase.from("css_presets").select("*").order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("css_presets")
+      .select("*")
+      .order("created_at", { ascending: false });
     if (error) return toast.error(error.message);
     setItems((data ?? []) as CssPreset[]);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   async function save() {
     if (!name.trim()) return toast.error("Name required");
@@ -86,7 +118,8 @@ function PresetManager() {
     setSaving(false);
     if (error) return toast.error(error.message);
     toast.success("Saved");
-    setName(""); setEditing(null);
+    setName("");
+    setEditing(null);
     load();
   }
 
@@ -98,7 +131,10 @@ function PresetManager() {
   }
 
   function edit(p: CssPreset) {
-    setEditing(p.id); setName(p.name); setCss(p.css); setKeyframes(p.keyframes);
+    setEditing(p.id);
+    setName(p.name);
+    setCss(p.css);
+    setKeyframes(p.keyframes);
   }
 
   return (
@@ -108,16 +144,30 @@ function PresetManager() {
           <h2 className="font-medium">{editing ? "Edit preset" : "New preset"}</h2>
           <div className="space-y-1.5">
             <Label>Name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Neon Pulse" />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Neon Pulse"
+            />
           </div>
           <div className="space-y-1.5">
             <Label>CSS (applied to the image)</Label>
-            <Textarea className="font-mono text-xs min-h-32" value={css} onChange={(e) => setCss(e.target.value)} />
-            <p className="text-xs text-muted-foreground">Use <code>animation: fx 2s infinite;</code> to reference your keyframes.</p>
+            <Textarea
+              className="font-mono text-xs min-h-32"
+              value={css}
+              onChange={(e) => setCss(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Use <code>animation: fx 2s infinite;</code> to reference your keyframes.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Keyframes (optional)</Label>
-            <Textarea className="font-mono text-xs min-h-40" value={keyframes} onChange={(e) => setKeyframes(e.target.value)} />
+            <Textarea
+              className="font-mono text-xs min-h-40"
+              value={keyframes}
+              onChange={(e) => setKeyframes(e.target.value)}
+            />
           </div>
           <div className="flex gap-2">
             <Button onClick={save} disabled={saving}>
@@ -125,19 +175,39 @@ function PresetManager() {
               {editing ? "Update" : "Save preset"}
             </Button>
             {editing && (
-              <Button variant="ghost" onClick={() => { setEditing(null); setName(""); }}>Cancel</Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setEditing(null);
+                  setName("");
+                }}
+              >
+                Cancel
+              </Button>
             )}
           </div>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="font-medium mb-3">Saved presets</h3>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="font-medium">Saved presets</h3>
+            <Button variant="outline" size="sm" onClick={addStarterPresets} disabled={saving}>
+              <Plus className="size-4" /> Add starter pack
+            </Button>
+          </div>
           <div className="space-y-2">
             {items.length === 0 && <p className="text-sm text-muted-foreground">None yet.</p>}
             {items.map((p) => (
-              <div key={p.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <button onClick={() => edit(p)} className="text-sm hover:text-primary">{p.name}</button>
-                <Button variant="ghost" size="icon" onClick={() => remove(p.id)}><Trash2 className="size-4" /></Button>
+              <div
+                key={p.id}
+                className="flex items-center justify-between rounded-md border border-border px-3 py-2"
+              >
+                <button onClick={() => edit(p)} className="text-sm hover:text-primary">
+                  {p.name}
+                </button>
+                <Button variant="ghost" size="icon" onClick={() => remove(p.id)}>
+                  <Trash2 className="size-4" />
+                </Button>
               </div>
             ))}
           </div>
@@ -153,8 +223,14 @@ function PresetManager() {
 }
 
 export function PresetPreview({
-  css, keyframes, imageUrl,
-}: { css: string; keyframes: string; imageUrl: string }) {
+  css,
+  keyframes,
+  imageUrl,
+}: {
+  css: string;
+  keyframes: string;
+  imageUrl: string;
+}) {
   const srcDoc = `<!doctype html><html><head><style>
 html,body{margin:0;background:#0d0f14;display:flex;align-items:center;justify-content:center;height:100vh}
 ${keyframes}
@@ -173,23 +249,42 @@ function ComponentManager() {
   const [items, setItems] = useState<Component[]>([]);
   const [name, setName] = useState("");
   const [lang, setLang] = useState<PreviewLang>("html_css");
-  const [html, setHtml] = useState("<button class=\"btn\">Click me</button>");
-  const [css, setCss] = useState(".btn{padding:10px 20px;border-radius:8px;background:#4fd1c5;color:#0d0f14;border:0;cursor:pointer}");
+  const [html, setHtml] = useState('<button class="btn">Click me</button>');
+  const [css, setCss] = useState(
+    ".btn{padding:10px 20px;border-radius:8px;background:#4fd1c5;color:#0d0f14;border:0;cursor:pointer}",
+  );
   const [reactCode, setReactCode] = useState(
     "function App(){\n  return <button className=\"btn\" onClick={()=>alert('hi')}>Click me</button>;\n}",
   );
   const [tailwindCode, setTailwindCode] = useState(
-    "function App(){\n  return <button className=\"px-5 py-2 rounded-lg bg-teal-400 text-slate-900 font-medium hover:bg-teal-300\">Click me</button>;\n}",
+    'function App(){\n  return <button className="px-5 py-2 rounded-lg bg-teal-400 text-slate-900 font-medium hover:bg-teal-300">Click me</button>;\n}',
   );
   const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  async function addStarterComponents() {
+    setSaving(true);
+    const { error } = await supabase.from("components").upsert(starterComponents, {
+      onConflict: "name",
+      ignoreDuplicates: true,
+    });
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("Starter components added");
+    load();
+  }
+
   async function load() {
-    const { data, error } = await supabase.from("components").select("*").order("created_at", { ascending: false });
+    const { data, error } = await supabase
+      .from("components")
+      .select("*")
+      .order("created_at", { ascending: false });
     if (error) return toast.error(error.message);
     setItems((data ?? []) as Component[]);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   async function save() {
     if (!name.trim()) return toast.error("Name required");
@@ -210,14 +305,16 @@ function ComponentManager() {
   }
 
   function edit(c: Component) {
-    setEditing(c.id); setName(c.name);
+    setEditing(c.id);
+    setName(c.name);
     setHtml(c.variants.html_css?.html ?? "");
     setCss(c.variants.html_css?.css ?? c.variants.react_css?.css ?? "");
     setReactCode(c.variants.react_css?.react ?? "");
     setTailwindCode(c.variants.react_tailwind?.react ?? "");
   }
   function reset() {
-    setEditing(null); setName("");
+    setEditing(null);
+    setName("");
   }
   async function remove(id: string) {
     if (!confirm("Delete this component?")) return;
@@ -241,12 +338,18 @@ function ComponentManager() {
           <div className="grid gap-3 sm:grid-cols-[2fr_1fr]">
             <div className="space-y-1.5">
               <Label>Name</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Header" />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Header"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Preview language</Label>
               <Select value={lang} onValueChange={(v) => setLang(v as PreviewLang)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="html_css">HTML / CSS</SelectItem>
                   <SelectItem value="react_css">React / CSS</SelectItem>
@@ -269,7 +372,11 @@ function ComponentManager() {
             </>
           )}
           {lang === "react_tailwind" && (
-            <CodeArea label="React + Tailwind (must define App)" value={tailwindCode} onChange={setTailwindCode} />
+            <CodeArea
+              label="React + Tailwind (must define App)"
+              value={tailwindCode}
+              onChange={setTailwindCode}
+            />
           )}
 
           <div className="flex gap-2">
@@ -277,7 +384,11 @@ function ComponentManager() {
               {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
               {editing ? "Update" : "Save component"}
             </Button>
-            {editing && <Button variant="ghost" onClick={reset}>Cancel</Button>}
+            {editing && (
+              <Button variant="ghost" onClick={reset}>
+                Cancel
+              </Button>
+            )}
           </div>
           <p className="text-xs text-muted-foreground">
             Saving stores all 3 language variants — fill in the ones you want the client to use.
@@ -285,13 +396,25 @@ function ComponentManager() {
         </div>
 
         <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="font-medium mb-3">Saved components</h3>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="font-medium">Saved components</h3>
+            <Button variant="outline" size="sm" onClick={addStarterComponents} disabled={saving}>
+              <Plus className="size-4" /> Add starter pack
+            </Button>
+          </div>
           <div className="space-y-2">
             {items.length === 0 && <p className="text-sm text-muted-foreground">None yet.</p>}
             {items.map((c) => (
-              <div key={c.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
-                <button onClick={() => edit(c)} className="text-sm hover:text-primary">{c.name}</button>
-                <Button variant="ghost" size="icon" onClick={() => remove(c.id)}><Trash2 className="size-4" /></Button>
+              <div
+                key={c.id}
+                className="flex items-center justify-between rounded-md border border-border px-3 py-2"
+              >
+                <button onClick={() => edit(c)} className="text-sm hover:text-primary">
+                  {c.name}
+                </button>
+                <Button variant="ghost" size="icon" onClick={() => remove(c.id)}>
+                  <Trash2 className="size-4" />
+                </Button>
               </div>
             ))}
           </div>
@@ -299,7 +422,9 @@ function ComponentManager() {
       </div>
 
       <div className="rounded-xl border border-border bg-card p-5">
-        <h3 className="font-medium mb-3">Preview <span className="text-xs text-muted-foreground">({lang})</span></h3>
+        <h3 className="font-medium mb-3">
+          Preview <span className="text-xs text-muted-foreground">({lang})</span>
+        </h3>
         <div className="aspect-video w-full rounded-md overflow-hidden border border-border">
           <SandboxIframe srcDoc={srcDoc} className="w-full h-full border-0" />
         </div>
@@ -308,11 +433,23 @@ function ComponentManager() {
   );
 }
 
-function CodeArea({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+function CodeArea({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <Textarea className="font-mono text-xs min-h-40" value={value} onChange={(e) => onChange(e.target.value)} />
+      <Textarea
+        className="font-mono text-xs min-h-40"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </div>
   );
 }
