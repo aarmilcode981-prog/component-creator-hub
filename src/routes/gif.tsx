@@ -71,7 +71,7 @@ ${preset.keyframes}
         quality: 10,
         width: w,
         height: h,
-        workerScript: "https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.worker.js",
+        workerScript: "/gif.worker.js",
       });
 
       const frameCount = Math.max(1, Math.round((duration / 1000) * fps));
