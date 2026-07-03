@@ -56,7 +56,7 @@ ${preset.keyframes}
     let styleEl: HTMLStyleElement | null = null;
     try {
       // dynamic imports (browser-only)
-      const html2canvas = (await import("html2canvas")).default;
+      const { toCanvas } = await import("html-to-image");
       const GIF = (await import("gif.js")).default;
 
       // Build a real DOM stage in the main document so CSS animations
@@ -107,12 +107,11 @@ ${preset.keyframes}
         // eslint-disable-next-line no-await-in-loop
         await new Promise((r) => setTimeout(r, delay));
         // eslint-disable-next-line no-await-in-loop
-        const canvas = await html2canvas(stage, {
+        const canvas = await toCanvas(stage, {
           backgroundColor: "#0d0f14",
-          useCORS: true,
-          logging: false,
           width: w,
           height: h,
+          cacheBust: true,
         });
         gif.addFrame(canvas, { delay, copy: true });
       }
