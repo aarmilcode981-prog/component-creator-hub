@@ -55,18 +55,20 @@ ${preset.keyframes}
     let stage: HTMLDivElement | null = null;
     let styleEl: HTMLStyleElement | null = null;
     try {
-      // dynamic imports (browser-only)
-      const { toCanvas } = await import("html-to-image");
       const GIF = (await import("gif.js")).default;
 
-      // Build a real DOM stage in the main document so CSS animations
-      // actually tick between frame captures (html2canvas + iframes is unreliable).
+      // Render frames by drawing the source image directly to a 2D canvas,
+      // applying the computed CSS transform/opacity/filter from a hidden
+      // "probe" element at each timestamp. This avoids DOM->SVG cloning
+      // (html-to-image / html2canvas) which is unreliable with paused
+      // animations and modern color functions.
+      const W = 512;
+      const H = 512;
       const uid = `gifx_${Math.random().toString(36).slice(2, 9)}`;
       styleEl = document.createElement("style");
-      // Scope the preset's keyframes + rules to our stage so nothing leaks.
       styleEl.textContent = `
-        #${uid}{position:fixed;left:-99999px;top:0;width:512px;height:512px;
-          background:#0d0f14;display:flex;align-items:center;justify-content:center;overflow:hidden;z-index:-1}
+        #${uid}{position:fixed;left:-99999px;top:0;width:${W}px;height:${H}px;
+          display:flex;align-items:center;justify-content:center;overflow:hidden;z-index:-1;pointer-events:none}
         #${uid} .fx{max-width:100%;max-height:100%;${preset.css}}
         ${preset.keyframes}
       `;
@@ -74,60 +76,91 @@ ${preset.keyframes}
 
       stage = document.createElement("div");
       stage.id = uid;
-      const img = document.createElement("img");
-      img.className = "fx";
-      img.crossOrigin = "anonymous";
-      img.src = imgUrl;
-      stage.appendChild(img);
+      const probe = document.createElement("img");
+      probe.className = "fx";
+      probe.src = imgUrl;
+      stage.appendChild(probe);
       document.body.appendChild(stage);
 
-      // Wait for the image to load so the first frame isn't blank.
+      // Load a separate source Image for drawImage.
+      const src = new Image();
+      src.src = imgUrl;
       await new Promise<void>((res, rej) => {
-        if (img.complete && img.naturalWidth > 0) return res();
-        img.onload = () => res();
-        img.onerror = () => rej(new Error("Failed to load image"));
+        const done = () => {
+          if (src.complete && probe.complete && src.naturalWidth > 0) res();
+        };
+        if (src.complete && probe.complete && src.naturalWidth > 0) return res();
+        src.onload = done;
+        probe.onload = done;
+        src.onerror = () => rej(new Error("Failed to load image"));
+        probe.onerror = () => rej(new Error("Failed to load image"));
       });
-
-      const rect = stage.getBoundingClientRect();
-      const w = Math.max(64, Math.round(rect.width));
-      const h = Math.max(64, Math.round(rect.height));
 
       const gif = new GIF({
         workers: 2,
         quality: 10,
-        width: w,
-        height: h,
+        width: W,
+        height: H,
+        background: "#0d0f14",
         workerScript: "/gif.worker.js",
       });
 
       const frameCount = Math.max(1, Math.round((duration / 1000) * fps));
       const delay = Math.round(1000 / fps);
-      const animatedElements = [img, ...Array.from(stage.querySelectorAll<HTMLElement>("*"))];
 
       const waitForPaint = () =>
         new Promise<void>((resolve) => {
           requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
         });
 
+      // Rendered box of the probe image (unaffected by transform).
+      probe.style.animationPlayState = "paused";
+      probe.style.animationDelay = "0ms";
+      probe.style.animationFillMode = "both";
+      await waitForPaint();
+      const pRect = probe.getBoundingClientRect();
+      const sRect = stage.getBoundingClientRect();
+      const cx = pRect.left + pRect.width / 2 - sRect.left;
+      const cy = pRect.top + pRect.height / 2 - sRect.top;
+      const iw = pRect.width || src.naturalWidth;
+      const ih = pRect.height || src.naturalHeight;
+
       for (let i = 0; i < frameCount; i++) {
         const elapsed = i * delay;
-        animatedElements.forEach((el) => {
-          // Freeze the live CSS animation at the exact timestamp for this GIF frame.
-          // Without this, DOM-to-canvas cloning restarts animations at frame 0 each capture.
-          el.style.animationDelay = `-${elapsed}ms`;
-          el.style.animationFillMode = "both";
-          el.style.animationPlayState = "paused";
-        });
-        stage.getBoundingClientRect();
+        probe.style.animationDelay = `-${elapsed}ms`;
+        // Force reflow so computed style reflects the new delay.
+        void probe.offsetWidth;
         // eslint-disable-next-line no-await-in-loop
         await waitForPaint();
-        // eslint-disable-next-line no-await-in-loop
-        const canvas = await toCanvas(stage, {
-          backgroundColor: "#0d0f14",
-          width: w,
-          height: h,
-          cacheBust: true,
-        });
+
+        const cs = getComputedStyle(probe);
+        const canvas = document.createElement("canvas");
+        canvas.width = W;
+        canvas.height = H;
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "#0d0f14";
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.save();
+        // Move to the image center, apply transform matrix around center.
+        ctx.translate(cx, cy);
+        if (cs.transform && cs.transform !== "none") {
+          try {
+            const m = new DOMMatrix(cs.transform);
+            ctx.transform(m.a, m.b, m.c, m.d, m.e, m.f);
+          } catch {
+            /* ignore */
+          }
+        }
+        const op = parseFloat(cs.opacity);
+        if (!Number.isNaN(op)) ctx.globalAlpha = op;
+        if (cs.filter && cs.filter !== "none") {
+          // Canvas ctx.filter supports the same syntax as CSS filter.
+          try { ctx.filter = cs.filter; } catch { /* ignore */ }
+        }
+        ctx.drawImage(src, -iw / 2, -ih / 2, iw, ih);
+        ctx.restore();
+
         gif.addFrame(canvas, { delay, copy: true });
       }
 
