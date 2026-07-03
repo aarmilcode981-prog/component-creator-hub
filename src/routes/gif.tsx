@@ -52,17 +52,43 @@ ${preset.keyframes}
     if (!imgUrl) return toast.error("Upload an image first");
     if (!preset) return toast.error("Pick a preset");
     setBusy(true);
+    let stage: HTMLDivElement | null = null;
+    let styleEl: HTMLStyleElement | null = null;
     try {
       // dynamic imports (browser-only)
       const html2canvas = (await import("html2canvas")).default;
       const GIF = (await import("gif.js")).default;
 
-      const iframe = iframeRef.current;
-      if (!iframe?.contentDocument) throw new Error("Preview not ready");
-      const target = iframe.contentDocument.querySelector<HTMLElement>(".fx");
-      if (!target) throw new Error("Image not found in preview");
+      // Build a real DOM stage in the main document so CSS animations
+      // actually tick between frame captures (html2canvas + iframes is unreliable).
+      const uid = `gifx_${Math.random().toString(36).slice(2, 9)}`;
+      styleEl = document.createElement("style");
+      // Scope the preset's keyframes + rules to our stage so nothing leaks.
+      styleEl.textContent = `
+        #${uid}{position:fixed;left:-99999px;top:0;width:512px;height:512px;
+          background:#0d0f14;display:flex;align-items:center;justify-content:center;overflow:hidden;z-index:-1}
+        #${uid} .fx{max-width:100%;max-height:100%;${preset.css}}
+        ${preset.keyframes}
+      `;
+      document.head.appendChild(styleEl);
 
-      const rect = target.getBoundingClientRect();
+      stage = document.createElement("div");
+      stage.id = uid;
+      const img = document.createElement("img");
+      img.className = "fx";
+      img.crossOrigin = "anonymous";
+      img.src = imgUrl;
+      stage.appendChild(img);
+      document.body.appendChild(stage);
+
+      // Wait for the image to load so the first frame isn't blank.
+      await new Promise<void>((res, rej) => {
+        if (img.complete && img.naturalWidth > 0) return res();
+        img.onload = () => res();
+        img.onerror = () => rej(new Error("Failed to load image"));
+      });
+
+      const rect = stage.getBoundingClientRect();
       const w = Math.max(64, Math.round(rect.width));
       const h = Math.max(64, Math.round(rect.height));
 
@@ -81,7 +107,7 @@ ${preset.keyframes}
         // eslint-disable-next-line no-await-in-loop
         await new Promise((r) => setTimeout(r, delay));
         // eslint-disable-next-line no-await-in-loop
-        const canvas = await html2canvas(target, {
+        const canvas = await html2canvas(stage, {
           backgroundColor: "#0d0f14",
           useCORS: true,
           logging: false,
@@ -98,11 +124,15 @@ ${preset.keyframes}
         a.download = `${preset.name.replace(/\s+/g, "-").toLowerCase()}.gif`;
         a.click();
         URL.revokeObjectURL(url);
+        stage?.remove();
+        styleEl?.remove();
         setBusy(false);
         toast.success("GIF downloaded");
       });
       gif.render();
     } catch (err) {
+      stage?.remove();
+      styleEl?.remove();
       setBusy(false);
       toast.error(err instanceof Error ? err.message : "Export failed");
     }
